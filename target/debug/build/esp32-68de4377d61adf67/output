@@ -1,3 +1,0 @@
-cargo:rustc-link-search=/Users/chris/Git/esp32/target/debug/build/esp32-68de4377d61adf67/out
-cargo:rerun-if-changed=device.x
-cargo:rerun-if-changed=build.rs
