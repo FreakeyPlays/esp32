@@ -28,27 +28,16 @@ use log::info;
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
 
-    let mut flash_storage = FlashStorage::new();
-    let mut data_to_write = Store::new();
+    let mut store = Store::new(0);
     let cp1 = Chip::new([1, 2, 3, 4], "chris");
-    data_to_write.add_chip(cp1).unwrap();
-    info!("Data to write: {:?}", data_to_write);
+    store.add_chip(cp1).unwrap();
+    info!("Data to save: {:?}", store);
 
-    let mut buffer = [0; 250];
-    if let Err(e) = data_to_write.to_bytes(&mut buffer) {
-        info!("Failed to convert data to bytes: {:?}", e);
-    }
-    info!("To Bytes: {:?}", buffer);
-    flash_storage.write_bytes(0x3F0000, &buffer).unwrap();
+    let _ = store.save();
 
-    let mut buffer = [0; 250];
-    if let Err(e) = flash_storage.read_bytes(0x3F0000, &mut buffer) {
-        info!("Failed to read bytes from flash storage: {:?}", e);
-    }
-    info!("From Bytes: {:?}", buffer);
-    let read_data = Store::new_from_bytes(&buffer);
-
-    info!("Final Data: {:?}", read_data);
+    let mut store2 = Store::new(0);
+    let _ = store2.load();
+    info!("Read data: {:?}", store2);
 
     info!("Start Loop");
     loop {
