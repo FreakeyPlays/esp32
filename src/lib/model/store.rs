@@ -24,6 +24,10 @@
 use core::mem::size_of;
 use core::slice;
 
+use log::info;
+
+use crate::lib::flash::FlashStorage;
+
 const CHIP_COUNT: usize = 10;
 const LOG_COUNT: usize = 10;
 
@@ -35,6 +39,7 @@ const TOTAL_STORE_SIZE: usize = CHIP_SIZE * CHIP_COUNT + LOG_SIZE * LOG_COUNT;
 pub type Name = [u8; 5];
 pub type Id = [u8; 4];
 
+/// Repräsentiert einen Chip
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Chip {
     id: Id,
@@ -59,6 +64,7 @@ impl Chip {
     };
 }
 
+/// Repräsentiert ein Log
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Log {
     user_id: Id,
@@ -89,18 +95,37 @@ impl Log {
     };
 }
 
-#[derive(Debug, Clone)]
+/// Speichert Chips und Logs
+#[derive(Debug)]
 pub struct Store {
+    flash_storage: FlashStorage,
     chips: [Chip; CHIP_COUNT],
     logs: [Log; LOG_COUNT],
 }
 
 impl Store {
-    pub fn new() -> Self {
+    pub fn new(base_address: u32) -> Self {
         Self {
+            flash_storage: FlashStorage::new(base_address),
             chips: [Chip::default(); CHIP_COUNT],
             logs: [Log::default(); LOG_COUNT],
         }
+    }
+
+    pub fn save(&self) -> Result<(), &'static str> {
+        let mut buffer = [0u8; TOTAL_STORE_SIZE];
+        self.to_bytes(&mut buffer)?;
+        info!("Write buffer: {:?}", buffer);
+        self.flash_storage.write_to_memory(&buffer);
+        Ok(())
+    }
+
+    pub fn load(&mut self) -> Result<(), &'static str> {
+        let mut buffer = [0u8; TOTAL_STORE_SIZE];
+        self.flash_storage.read_from_memory(&mut buffer);
+        info!("Read buffer: {:?}", buffer);
+        *self = Self::new_from_bytes(&buffer);
+        Ok(())
     }
 
     pub fn new_from_bytes(buffer: &[u8; TOTAL_STORE_SIZE]) -> Self {
@@ -121,13 +146,15 @@ impl Store {
             offset += LOG_SIZE;
         }
 
-        Self { chips, logs }
+        Self {
+            flash_storage: FlashStorage::new(0), // Wird beim tatsächlichen Gebrauch überschrieben
+            chips,
+            logs,
+        }
     }
 
     pub fn to_bytes(&self, buffer: &mut [u8]) -> Result<usize, &'static str> {
-        let chip_size = size_of::<Chip>();
-        let log_size = size_of::<Log>();
-        let total_size = chip_size * CHIP_COUNT + log_size * LOG_COUNT;
+        let total_size = CHIP_SIZE * CHIP_COUNT + LOG_SIZE * LOG_COUNT;
 
         if buffer.len() < total_size {
             return Err("Buffer too small");
@@ -137,16 +164,16 @@ impl Store {
 
         for chip in &self.chips {
             let chip_bytes =
-                unsafe { slice::from_raw_parts(chip as *const Chip as *const u8, chip_size) };
-            buffer[offset..offset + chip_size].copy_from_slice(chip_bytes);
-            offset += chip_size;
+                unsafe { slice::from_raw_parts(chip as *const Chip as *const u8, CHIP_SIZE) };
+            buffer[offset..offset + CHIP_SIZE].copy_from_slice(chip_bytes);
+            offset += CHIP_SIZE;
         }
 
         for log in &self.logs {
             let log_bytes =
-                unsafe { slice::from_raw_parts(log as *const Log as *const u8, log_size) };
-            buffer[offset..offset + log_size].copy_from_slice(log_bytes);
-            offset += log_size;
+                unsafe { slice::from_raw_parts(log as *const Log as *const u8, LOG_SIZE) };
+            buffer[offset..offset + LOG_SIZE].copy_from_slice(log_bytes);
+            offset += LOG_SIZE;
         }
 
         Ok(total_size)
